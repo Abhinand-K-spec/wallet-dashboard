@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Status {
+  ACTIVE
+  SUSPENDED
+}
+
+enum DepositStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  userId       String   @unique // A custom user ID like 'USR-1234'
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  status       Status   @default(ACTIVE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  deposits     WalletDeposit[]
+  transactions Transaction[]
+  withdrawals  Withdrawal[]
+  adminActions AdminAction[]   @relation("AdminActionAdmin")
+}
+
+model WalletDeposit {
+  id               String        @id @default(uuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+  walletAddress    String?       // Address user sent FROM
+  txHash           String        @unique
+  amountUSD        Float
+  equivalentINR    Float?
+  adminEnteredRate Float?
+  status           DepositStatus @default(PENDING)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model Transaction {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+  transactionType TransactionType
+  amountUSD       Float
+  amountINR       Float?
+  reference       String?           // Could be Deposit ID or Withdrawal ID
+  status          TransactionStatus @default(PENDING)
+  createdAt       DateTime          @default(now())
+}
+
+model Withdrawal {
+  id            String           @id @default(uuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+  amountUSD     Float
+  amountINR     Float
+  accountHolder String
+  accountNumber String
+  ifsc          String
+  status        WithdrawalStatus @default(PENDING)
+  approvedBy    String?
+  utr           String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+}
+
+model AdminAction {
+  id        String   @id @default(uuid())
+  adminId   String
+  admin     User     @relation("AdminActionAdmin", fields: [adminId], references: [id])
+  action    String   // e.g., "APPROVED_DEPOSIT", "REJECTED_WITHDRAWAL"
+  targetId  String?  // The ID of the affected entity
+  createdAt DateTime @default(now())
+}
