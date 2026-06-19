@@ -92,17 +92,14 @@ export const verifyDeposit = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Deposit already processed' });
     }
 
-    if (action === 'APPROVED' && !adminEnteredRate) {
-      return res.status(400).json({ error: 'Admin entered rate is required for approval' });
-    }
-
-    const equivalentINR = action === 'APPROVED' ? deposit.amountUSD * parseFloat(adminEnteredRate) : null;
+    const rateFloat = adminEnteredRate ? parseFloat(adminEnteredRate) : null;
+    const equivalentINR = (action === 'APPROVED' && rateFloat) ? deposit.amountUSD * rateFloat : null;
 
     const updatedDeposit = await prisma.walletDeposit.update({
       where: { id: String(depositId) },
       data: {
         status: action,
-        adminEnteredRate: action === 'APPROVED' ? parseFloat(adminEnteredRate) : null,
+        adminEnteredRate: (action === 'APPROVED' && rateFloat) ? rateFloat : null,
         equivalentINR,
       },
     });
@@ -183,3 +180,109 @@ export const manageWithdrawal = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const getAllUsers = async (req: AuthRequest, res: Response) => {
+  try {
+    const { search, status, role, page = '1', limit = '10' } = req.query;
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const whereClause: any = {};
+
+    if (search) {
+      whereClause.OR = [
+        { email: { contains: search as string, mode: 'insensitive' } },
+        { userId: { contains: search as string, mode: 'insensitive' } }
+      ];
+    }
+
+    if (status && (status === 'ACTIVE' || status === 'SUSPENDED')) {
+      whereClause.status = status;
+    }
+
+    if (role && (role === 'USER' || role === 'ADMIN')) {
+      whereClause.role = role;
+    }
+
+    const [users, totalCount] = await Promise.all([
+      prisma.user.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          userId: true,
+          email: true,
+          role: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limitNum
+      }),
+      prisma.user.count({ where: whereClause })
+    ]);
+
+    res.json({
+      users,
+      totalCount,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(totalCount / limitNum)
+    });
+  } catch (error) {
+    console.error('Get all users error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const toggleUserStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (id === req.user?.id) {
+      return res.status(400).json({ error: 'You cannot suspend your own admin account.' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: id as string } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const newStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+
+    const updatedUser = await prisma.user.update({
+      where: { id: id as string },
+      data: { status: newStatus },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    // Log the admin action
+    await prisma.adminAction.create({
+      data: {
+        adminId: req.user!.id,
+        action: newStatus === 'SUSPENDED' ? 'SUSPENDED_USER' : 'ACTIVATED_USER',
+        targetId: user.id
+      }
+    });
+
+    res.json({
+      message: `User status successfully updated to ${newStatus.toLowerCase()}`,
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Toggle user status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+

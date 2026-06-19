@@ -369,20 +369,20 @@ const getTronOnChainTransactions = async (address: string, apiKey: string): Prom
   if (isKeyValid) {
     try {
       const headers = { 'TRON-PRO-API-KEY': apiKey, 'Accept': 'application/json' };
-      const url = `https://apilist.tronscanapi.com/api/token_trc20/transfers?address=${address}&start=0&limit=10`;
+      const url = `https://apilist.tronscanapi.com/api/token_trc20/transfers?relatedAddress=${address}&start=0&limit=10`;
       const res = await fetch(url, { headers });
       const data = await res.json();
 
       if (data && Array.isArray(data.token_transfers)) {
         return data.token_transfers.map((tx: any) => {
           const decimals = Number(tx.tokenInfo?.tokenDecimal || 6);
-          const amount = Number(tx.amount_str || tx.amount || 0) / Math.pow(10, decimals);
+          const amount = Number(tx.quant || tx.amount_str || tx.amount || 0) / Math.pow(10, decimals);
           return {
             hash: tx.transaction_id || tx.tx_id,
             from: tx.from_address,
             to: tx.to_address,
             amountUSD: amount,
-            timestamp: Number(tx.timestamp || 0),
+            timestamp: Number(tx.block_ts || tx.timestamp || 0),
             blockNumber: String(tx.block || ''),
             tokenSymbol: tx.tokenInfo?.tokenAbbr || tx.tokenInfo?.tokenSymbol || 'TRC20'
           };

@@ -2,7 +2,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../store/authSlice';
 import type { RootState } from '../store/store';
-import { LayoutDashboard, ArrowDownToLine, ArrowUpFromLine, History, LogOut, Wallet } from 'lucide-react';
+import { LayoutDashboard, ArrowDownToLine, ArrowUpFromLine, History, LogOut, Wallet, Users } from 'lucide-react';
 
 const Layout = () => {
   const dispatch = useDispatch();
@@ -19,6 +19,7 @@ const Layout = () => {
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Verify Deposits', path: '/admin/deposits', icon: ArrowDownToLine },
     { name: 'Manage Withdrawals', path: '/admin/withdrawals', icon: ArrowUpFromLine },
+    { name: 'Manage Users', path: '/admin/users', icon: Users },
   ] : [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Deposit', path: '/deposit', icon: ArrowDownToLine },

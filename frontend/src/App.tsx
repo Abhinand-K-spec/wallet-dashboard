@@ -11,6 +11,7 @@ import WithdrawPage from './pages/WithdrawPage';
 import HistoryPage from './pages/HistoryPage';
 import AdminDepositsPage from './pages/AdminDepositsPage';
 import AdminWithdrawalsPage from './pages/AdminWithdrawalsPage';
+import AdminUsersPage from './pages/AdminUsersPage';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: ReactNode, allowedRoles?: string[] }) => {
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
@@ -49,6 +50,9 @@ function App() {
           } />
           <Route path="admin/withdrawals" element={
             <ProtectedRoute allowedRoles={['ADMIN']}><AdminWithdrawalsPage /></ProtectedRoute>
+          } />
+          <Route path="admin/users" element={
+            <ProtectedRoute allowedRoles={['ADMIN']}><AdminUsersPage /></ProtectedRoute>
           } />
         </Route>
 

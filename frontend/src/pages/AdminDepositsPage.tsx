@@ -29,7 +29,6 @@ const AdminDepositsPage = () => {
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const dispatch = useDispatch();
 
@@ -56,15 +55,10 @@ const AdminDepositsPage = () => {
   }, [refreshKey]);
 
   const handleAction = async (depositId: string, action: 'APPROVED' | 'REJECTED') => {
-    if (action === 'APPROVED' && !rateInputs[depositId]) {
-      dispatch(addToast({ message: 'Please enter an INR conversion rate before approving.', type: 'error' }));
-      return;
-    }
     setActionLoading(depositId);
     try {
       await api.post(`/admin/deposit/${depositId}/verify`, {
         action,
-        adminEnteredRate: action === 'APPROVED' ? rateInputs[depositId] : undefined,
       });
       dispatch(addToast({ message: `Deposit ${action === 'APPROVED' ? 'approved' : 'rejected'} successfully!`, type: 'success' }));
       setRefreshKey(prev => prev + 1);
@@ -131,44 +125,23 @@ const AdminDepositsPage = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-end gap-3 lg:flex-col lg:items-stretch">
-                    <div className="flex-1 lg:flex-none">
-                      <label className="block text-xs text-gray-400 mb-1">INR Rate (₹/USD)</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={rateInputs[deposit.id] || ''}
-                          onChange={(e) => setRateInputs(prev => ({ ...prev, [deposit.id]: e.target.value }))}
-                          className="w-full lg:w-36 bg-gray-950 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 pl-7"
-                          placeholder="83.50"
-                        />
-                        <span className="absolute left-2.5 top-2 text-gray-500 text-sm">₹</span>
-                      </div>
-                      {rateInputs[deposit.id] && (
-                        <p className="text-xs text-emerald-400 mt-1">
-                          = ₹{(deposit.amountUSD * parseFloat(rateInputs[deposit.id])).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleAction(deposit.id, 'APPROVED')}
-                        disabled={actionLoading === deposit.id}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
-                      >
-                        {actionLoading === deposit.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => handleAction(deposit.id, 'REJECTED')}
-                        disabled={actionLoading === deposit.id}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-red-600/80 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
-                      >
-                        <XCircle className="w-4 h-4" />
-                        Reject
-                      </button>
-                    </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleAction(deposit.id, 'APPROVED')}
+                      disabled={actionLoading === deposit.id}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
+                    >
+                      {actionLoading === deposit.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleAction(deposit.id, 'REJECTED')}
+                      disabled={actionLoading === deposit.id}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-red-600/80 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Reject
+                    </button>
                   </div>
                 </div>
               </div>

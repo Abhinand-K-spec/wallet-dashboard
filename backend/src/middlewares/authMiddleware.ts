@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
+import prisma from '../prismaClient';
+
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key';
 
 export interface AuthRequest extends Request {
@@ -11,7 +13,7 @@ export interface AuthRequest extends Request {
   };
 }
 
-export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -22,6 +24,17 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
+    
+    // Check user status from DB
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized: User not found' });
+    }
+    
+    if (user.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Account suspended' });
+    }
+
     req.user = decoded;
     next();
   } catch (err) {

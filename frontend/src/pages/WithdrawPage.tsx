@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useDispatch } from 'react-redux';
 import { addToast } from '../store/toastSlice';
 import api from '../api/axios';
-import { Building2, Landmark, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { Building2, Landmark, CheckCircle2, Loader2, AlertCircle, RefreshCw, Calculator } from 'lucide-react';
 
 const WithdrawPage = () => {
   const [amountUSD, setAmountUSD] = useState('');
@@ -12,7 +12,32 @@ const WithdrawPage = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [inrRate, setInrRate] = useState<number>(94.0);
+  const [rateLoading, setRateLoading] = useState<boolean>(true);
   const dispatch = useDispatch();
+
+  useEffect(() => {
+    let active = true;
+    const fetchRate = async () => {
+      try {
+        const res = await fetch('https://open.er-api.com/v6/latest/USD');
+        const data = await res.json();
+        if (active && data && data.rates && typeof data.rates.INR === 'number') {
+          setInrRate(data.rates.INR);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch real-time USD/INR rate:', err);
+      } finally {
+        if (active) {
+          setRateLoading(false);
+        }
+      }
+    };
+    fetchRate();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -20,9 +45,7 @@ const WithdrawPage = () => {
     setError('');
     setSuccess('');
 
-    // Hardcoded demo conversion rate (should ideally be fetched from backend or real-time API)
-    const INR_RATE = 83.5;
-    const amountINR = (parseFloat(amountUSD) * INR_RATE).toFixed(2);
+    const amountINR = (parseFloat(amountUSD) * inrRate).toFixed(2);
 
     try {
       await api.post('/user/withdraw', {
@@ -32,7 +55,7 @@ const WithdrawPage = () => {
         accountNumber,
         ifsc
       });
-      const msg = 'Withdrawal request submitted successfully! Pending admin approval.';
+      const msg = `Withdrawal request submitted successfully! Approximate amount: ₹${parseFloat(amountINR).toLocaleString('en-IN', { minimumFractionDigits: 2 })}. Pending admin approval.`;
       setSuccess(msg);
       dispatch(addToast({ message: msg, type: 'success' }));
       setAmountUSD('');
@@ -71,6 +94,24 @@ const WithdrawPage = () => {
           </div>
         )}
 
+        {/* Live Exchange Rate Card */}
+        <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 flex items-center justify-between mb-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-500/10 rounded-lg">
+              <RefreshCw className={`w-4 h-4 text-indigo-400 ${rateLoading ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium">Exchange Rate (Live)</p>
+              <p className="text-sm font-bold text-white mt-0.5">
+                {rateLoading ? 'Fetching latest rates...' : `1 USD = ₹${inrRate.toFixed(2)} INR`}
+              </p>
+            </div>
+          </div>
+          <div className="text-xs bg-indigo-500/10 text-indigo-400 px-2.5 py-1 rounded-lg font-semibold border border-indigo-500/20">
+            USD / INR
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1.5">Withdrawal Amount (USD)</label>
@@ -86,10 +127,19 @@ const WithdrawPage = () => {
               />
               <span className="absolute left-4 top-3 text-gray-500 font-medium">$</span>
             </div>
-            {amountUSD && (
-              <p className="text-sm text-indigo-400 mt-2 ml-1">
-                Approximate INR: ₹{(parseFloat(amountUSD) * 83.5).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </p>
+            {amountUSD && !isNaN(parseFloat(amountUSD)) && (
+              <div className="mt-3 bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-4 flex items-start gap-3 shadow-inner">
+                <Calculator className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-sm leading-relaxed">
+                  <span className="text-xs text-gray-400 font-semibold block mb-0.5">CONVERSION SUMMARY</span>
+                  <p className="text-white font-bold text-lg">
+                    ₹{(parseFloat(amountUSD) * inrRate).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} INR
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1 font-mono">
+                    Formula: ${parseFloat(amountUSD).toFixed(2)} USD × {inrRate.toFixed(4)}
+                  </p>
+                </div>
+              </div>
             )}
           </div>
 
