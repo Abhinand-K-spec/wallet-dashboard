@@ -69,6 +69,12 @@ model WalletDeposit {
   status           DepositStatus @default(PENDING)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+  onChainVerified  Boolean       @default(false)
+  onChainNetwork   String?
+  onChainFrom      String?
+  onChainTo        String?
+  onChainAmount    Float?
+  onChainTxHash    String?
 }
 
 model Transaction {
@@ -89,12 +95,15 @@ model Withdrawal {
   user          User             @relation(fields: [userId], references: [id])
   amountUSD     Float
   amountINR     Float
-  accountHolder String
-  accountNumber String
-  ifsc          String
+  method        String           @default("BANK") // "BANK" or "USDT"
+  accountHolder String           // Acts as Name for both BANK and USDT
+  accountNumber String?          // Optional for USDT
+  ifsc          String?          // Optional for USDT
+  walletAddress String?          // Optional for BANK
   status        WithdrawalStatus @default(PENDING)
   approvedBy    String?
-  utr           String?
+  utr           String?          // Can store TX Hash for USDT or UTR for BANK
+  downloaded    Boolean          @default(false)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 }
@@ -106,4 +115,9 @@ model AdminAction {
   action    String   // e.g., "APPROVED_DEPOSIT", "REJECTED_WITHDRAWAL"
   targetId  String?  // The ID of the affected entity
   createdAt DateTime @default(now())
+}
+
+model SystemSetting {
+  key   String @id
+  value String
 }

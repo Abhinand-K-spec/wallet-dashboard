@@ -19,16 +19,19 @@ interface Deposit {
   status: string;
   equivalentINR: number | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface Withdrawal {
   id: string;
   amountUSD: number;
   amountINR: number;
+  method: string;
   accountHolder: string;
   status: string;
   utr: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 const statusIcon = (status: string) => {
@@ -95,6 +98,9 @@ const HistoryPage = () => {
       amountINR: d.equivalentINR,
       status: d.status,
       createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+      method: null,
+      utr: d.txHash,
     })),
     ...withdrawals.map((w) => ({
       id: w.id,
@@ -103,6 +109,9 @@ const HistoryPage = () => {
       amountINR: w.amountINR,
       status: w.status,
       createdAt: w.createdAt,
+      updatedAt: w.updatedAt,
+      method: w.method,
+      utr: w.utr,
     })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -125,11 +134,10 @@ const HistoryPage = () => {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.key
-                ? 'bg-indigo-600 text-white shadow-lg'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-            }`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key
+              ? 'bg-indigo-600 text-white shadow-lg'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+              }`}
           >
             {tab.label} <span className="ml-1 text-xs opacity-70">({tab.count})</span>
           </button>
@@ -160,24 +168,57 @@ const HistoryPage = () => {
                 {combinedTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-gray-800/20 transition-colors">
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium ${
-                        tx.transactionType === 'DEPOSIT' ? 'bg-green-500/10 text-green-400' : 'bg-orange-500/10 text-orange-400'
-                      }`}>
-                        {tx.transactionType === 'DEPOSIT'
-                          ? <ArrowDownToLine className="w-3 h-3" />
-                          : <ArrowUpFromLine className="w-3 h-3" />}
-                        {tx.transactionType}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium w-fit ${tx.transactionType === 'DEPOSIT' ? 'bg-green-500/10 text-green-400' : 'bg-orange-500/10 text-orange-400'
+                          }`}>
+                          {tx.transactionType === 'DEPOSIT'
+                            ? <ArrowDownToLine className="w-3 h-3" />
+                            : <ArrowUpFromLine className="w-3 h-3" />}
+                          {tx.transactionType}
+                        </span>
+                        {tx.transactionType === 'WITHDRAWAL' && tx.method && (
+                          <span className={`text-[10px] font-semibold w-fit px-1.5 py-0.5 rounded border ${tx.method === 'USDT'
+                            ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            }`}>
+                            {tx.method === 'USDT' ? 'Wallet Transfer (USDT)' : 'Bank Transfer (INR)'}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 font-medium text-white">${tx.amountUSD.toFixed(2)}</td>
                     <td className="px-6 py-4 text-gray-300">{tx.amountINR ? `₹${tx.amountINR.toLocaleString('en-IN')}` : '—'}</td>
                     <td className="px-6 py-4">
-                      <span className={statusBadge(tx.status)}>
-                        {statusIcon(tx.status)}
-                        {tx.status}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={statusBadge(tx.status)}>
+                          {statusIcon(tx.status)}
+                          {tx.status}
+                        </span>
+                        {tx.status === 'APPROVED' && (
+                          <span className="text-[10px] text-blue-400 font-semibold block leading-tight mt-0.5">
+                            The amount will credit in your ac within 3 hours
+                          </span>
+                        )}
+                        {(tx.status === 'PAID' || tx.status === 'COMPLETED') && tx.utr && (
+                          <span className="text-[10px] text-indigo-400 font-mono block leading-tight mt-0.5 select-all">
+                            TxID/UTR: {tx.utr}
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-500">{new Date(tx.createdAt).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-gray-500">
+                      <div>{new Date(tx.createdAt).toLocaleString()}</div>
+                      {(tx.status === 'PAID' || tx.status === 'COMPLETED') && (
+                        <div className="text-[10px] text-emerald-400 font-semibold mt-1">
+                          Paid: {new Date(tx.updatedAt).toLocaleString()}
+                        </div>
+                      )}
+                      {tx.status === 'APPROVED' && (
+                        <div className="text-[10px] text-blue-400 font-semibold mt-1">
+                          Approved: {new Date(tx.updatedAt).toLocaleString()}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -240,28 +281,53 @@ const HistoryPage = () => {
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-800/50 text-gray-400">
                 <tr>
+                  <th className="px-6 py-4 font-medium">Method</th>
                   <th className="px-6 py-4 font-medium">Holder</th>
                   <th className="px-6 py-4 font-medium">USD</th>
                   <th className="px-6 py-4 font-medium">INR</th>
-                  <th className="px-6 py-4 font-medium">UTR</th>
+                  <th className="px-6 py-4 font-medium">UTR / TxID</th>
                   <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">Date</th>
+                  <th className="px-6 py-4 font-medium">Requested</th>
+                  <th className="px-6 py-4 font-medium">Paid / Processed</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
                 {withdrawals.map((w) => (
                   <tr key={w.id} className="hover:bg-gray-800/20 transition-colors">
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold border ${w.method === 'USDT'
+                        ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        }`}>
+                        {w.method === 'USDT' ? 'Wallet (USDT)' : 'Bank (INR)'}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-gray-300">{w.accountHolder}</td>
                     <td className="px-6 py-4 font-medium text-white">${w.amountUSD.toFixed(2)}</td>
                     <td className="px-6 py-4 text-gray-300">₹{w.amountINR.toLocaleString('en-IN')}</td>
                     <td className="px-6 py-4 font-mono text-indigo-400 text-xs">{w.utr || '—'}</td>
                     <td className="px-6 py-4">
-                      <span className={statusBadge(w.status)}>
-                        {statusIcon(w.status)}
-                        {w.status}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={statusBadge(w.status)}>
+                          {statusIcon(w.status)}
+                          {w.status}
+                        </span>
+                        {w.status === 'APPROVED' && (
+                          <span className="text-[10px] text-blue-400 font-semibold block leading-tight mt-0.5">
+                            The amount will credit in your ac after 3 hours
+                          </span>
+                        )}
+                        {(w.status === 'PAID' || w.status === 'COMPLETED') && w.utr && (
+                          <span className="text-[10px] text-indigo-400 font-mono block leading-tight mt-0.5 select-all">
+                            TxID/UTR: {w.utr}
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-500">{new Date(w.createdAt).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-gray-500 text-xs">{new Date(w.createdAt).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-gray-500 text-xs">
+                      {w.status === 'PENDING' ? '—' : new Date(w.updatedAt).toLocaleString()}
+                    </td>
                   </tr>
                 ))}
               </tbody>

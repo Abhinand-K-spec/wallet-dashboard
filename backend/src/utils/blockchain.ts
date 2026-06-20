@@ -4,6 +4,7 @@ interface OnChainResult {
   fromAddress: string;
   toAddress: string;
   amountUSD: number;
+  txHash?: string;
   message?: string;
 }
 
@@ -21,6 +22,7 @@ const verifyEthereumUSDT = async (txHash: string, expectedRecipient: string): Pr
       fromAddress: '0xMockUserWalletAddress7777777777777777',
       toAddress: expectedRecipient,
       amountUSD: 1000.0,
+      txHash,
     };
   }
 
@@ -117,6 +119,7 @@ const verifyEthereumUSDT = async (txHash: string, expectedRecipient: string): Pr
       fromAddress: tx.from || '',
       toAddress: recipient,
       amountUSD,
+      txHash: tx.hash || txHash,
     };
   } catch (err: any) {
     console.error('[Blockchain Verification] Error fetching tx details:', err);
@@ -236,6 +239,7 @@ const verifyTronUSDT = async (txHash: string, expectedRecipient: string, apiKey:
       fromAddress: 'TMockUserWalletAddress777777777777777',
       toAddress: expectedRecipient,
       amountUSD: 1000.0,
+      txHash,
     };
   }
 
@@ -266,6 +270,7 @@ const verifyTronUSDT = async (txHash: string, expectedRecipient: string, apiKey:
             fromAddress: transfer.from_address,
             toAddress: transfer.to_address,
             amountUSD,
+            txHash: txData.hash,
           };
         }
       }
@@ -291,6 +296,7 @@ const verifyTronUSDT = async (txHash: string, expectedRecipient: string, apiKey:
           fromAddress: matchedTx.from,
           toAddress: matchedTx.to,
           amountUSD,
+          txHash: matchedTx.transaction_id,
         };
       }
     }

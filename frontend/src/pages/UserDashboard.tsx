@@ -1,23 +1,27 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
-import { ArrowDownToLine, ArrowUpFromLine, Activity, DollarSign } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, Activity, DollarSign, Wallet } from 'lucide-react';
 
 interface Deposit {
   id: string;
   status: string;
   amountUSD: number;
+  equivalentINR: number | null;
+  adminEnteredRate: number | null;
 }
 
 interface Withdrawal {
   id: string;
   status: string;
   amountUSD: number;
+  amountINR: number;
 }
 
 interface Transaction {
   id: string;
   transactionType: string;
   amountUSD: number;
+  amountINR: number | null;
   status: string;
   createdAt: string;
 }
@@ -51,9 +55,13 @@ const UserDashboard = () => {
 
   if (loading) return <div className="text-gray-400">Loading dashboard...</div>;
 
-  const totalDeposits = profile?.deposits?.filter((d: Deposit) => d.status === 'APPROVED').reduce((acc: number, d: Deposit) => acc + d.amountUSD, 0) || 0;
-  const totalWithdrawals = profile?.withdrawals?.filter((w: Withdrawal) => ['APPROVED', 'PAID'].includes(w.status)).reduce((acc: number, w: Withdrawal) => acc + w.amountUSD, 0) || 0;
-  const availableBalance = totalDeposits - totalWithdrawals;
+  const totalDepositsINR = profile?.deposits?.filter((d: Deposit) => d.status === 'APPROVED').reduce((acc: number, d: Deposit) => acc + (d.equivalentINR ?? (d.amountUSD * (d.adminEnteredRate ?? 83.50))), 0) || 0;
+  const totalWithdrawalsINR = profile?.withdrawals?.filter((w: Withdrawal) => ['APPROVED', 'PAID'].includes(w.status)).reduce((acc: number, w: Withdrawal) => acc + w.amountINR, 0) || 0;
+  const availableBalanceINR = totalDepositsINR - totalWithdrawalsINR;
+
+  const totalDepositsUSD = profile?.deposits?.filter((d: Deposit) => d.status === 'APPROVED').reduce((acc: number, d: Deposit) => acc + d.amountUSD, 0) || 0;
+  const totalWithdrawalsUSD = profile?.withdrawals?.filter((w: Withdrawal) => ['APPROVED', 'PAID'].includes(w.status)).reduce((acc: number, w: Withdrawal) => acc + w.amountUSD, 0) || 0;
+  const availableBalanceUSD = totalDepositsUSD - totalWithdrawalsUSD;
 
   return (
     <div className="space-y-6">
@@ -64,11 +72,12 @@ const UserDashboard = () => {
         <div className="bg-gradient-to-br from-indigo-900/50 to-gray-900 border border-indigo-500/20 rounded-2xl p-6 shadow-lg">
           <div className="flex items-center gap-4 mb-4">
             <div className="p-3 bg-indigo-500/20 rounded-xl">
-              <DollarSign className="w-6 h-6 text-indigo-400" />
+              <Wallet className="w-6 h-6 text-indigo-400" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-400">Available Balance</p>
-              <h3 className="text-3xl font-bold text-white">${availableBalance.toFixed(2)}</h3>
+              <h3 className="text-3xl font-bold text-white">₹{availableBalanceINR.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</h3>
+              <p className="text-xs text-gray-500 mt-1 font-mono">approx. ${availableBalanceUSD.toFixed(2)} USDT</p>
             </div>
           </div>
         </div>
@@ -81,7 +90,8 @@ const UserDashboard = () => {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-400">Total Deposits</p>
-              <h3 className="text-2xl font-bold text-white">${totalDeposits.toFixed(2)}</h3>
+              <h3 className="text-2xl font-bold text-white">₹{totalDepositsINR.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</h3>
+              <p className="text-xs text-gray-500 mt-1 font-mono">${totalDepositsUSD.toFixed(2)} USDT</p>
             </div>
           </div>
         </div>
@@ -94,7 +104,8 @@ const UserDashboard = () => {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-400">Total Withdrawn</p>
-              <h3 className="text-2xl font-bold text-white">${totalWithdrawals.toFixed(2)}</h3>
+              <h3 className="text-2xl font-bold text-white">₹{totalWithdrawalsINR.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</h3>
+              <p className="text-xs text-gray-500 mt-1 font-mono">${totalWithdrawalsUSD.toFixed(2)} USDT</p>
             </div>
           </div>
         </div>
@@ -109,6 +120,7 @@ const UserDashboard = () => {
                 <tr>
                   <th className="px-6 py-4 font-medium">Type</th>
                   <th className="px-6 py-4 font-medium">Amount (USD)</th>
+                  <th className="px-6 py-4 font-medium">Amount (INR)</th>
                   <th className="px-6 py-4 font-medium">Status</th>
                   <th className="px-6 py-4 font-medium">Date</th>
                 </tr>
@@ -123,6 +135,7 @@ const UserDashboard = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 font-medium text-gray-200">${tx.amountUSD.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-gray-300">{tx.amountINR ? `₹${tx.amountINR.toLocaleString('en-IN')}` : '—'}</td>
                     <td className="px-6 py-4">
                       <span className={`text-xs font-medium ${
                         tx.status === 'COMPLETED' ? 'text-emerald-400' :

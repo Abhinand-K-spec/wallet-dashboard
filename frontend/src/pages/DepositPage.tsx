@@ -2,11 +2,12 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useDispatch } from 'react-redux';
 import { addToast } from '../store/toastSlice';
 import api from '../api/axios';
-import { QrCode, Copy, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { QrCode, Copy, CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
 const DepositPage = () => {
   const [txHash, setTxHash] = useState('');
   const [amountUSD, setAmountUSD] = useState('');
+  const [amountINR, setAmountINR] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
@@ -14,6 +15,8 @@ const DepositPage = () => {
   const [copied, setCopied] = useState(false);
   const [walletAddress, setWalletAddress] = useState('Loading address...');
   const [qrSrc, setQrSrc] = useState('/admin_qr.png');
+  const [exchangeRate, setExchangeRate] = useState<number>(83.50);
+  const [rateLoading, setRateLoading] = useState(true);
   const dispatch = useDispatch();
 
   useEffect(() => {
@@ -27,6 +30,22 @@ const DepositPage = () => {
       }
     };
     fetchAddress();
+  }, []);
+
+  useEffect(() => {
+    const fetchRate = async () => {
+      try {
+        const res = await api.get('/user/rate');
+        if (res.data && typeof res.data.rate === 'number') {
+          setExchangeRate(res.data.rate);
+        }
+      } catch (err) {
+        console.error('Failed to fetch exchange rate:', err);
+      } finally {
+        setRateLoading(false);
+      }
+    };
+    fetchRate();
   }, []);
 
   useEffect(() => {
@@ -62,6 +81,26 @@ const DepositPage = () => {
     }
   };
 
+  const handleUSDChange = (val: string) => {
+    setAmountUSD(val);
+    const num = parseFloat(val);
+    if (!isNaN(num)) {
+      setAmountINR((num * exchangeRate).toFixed(2));
+    } else {
+      setAmountINR('');
+    }
+  };
+
+  const handleINRChange = (val: string) => {
+    setAmountINR(val);
+    const num = parseFloat(val);
+    if (!isNaN(num)) {
+      setAmountUSD((num / exchangeRate).toFixed(2));
+    } else {
+      setAmountUSD('');
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -73,11 +112,12 @@ const DepositPage = () => {
         txHash,
         amountUSD,
       });
-      const msg = 'Deposit submitted successfully! Pending admin verification.';
+      const msg = `Deposit submitted successfully! Crediting approximately ₹${parseFloat(amountINR || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })} INR. Pending admin verification.`;
       setSuccess(msg);
       dispatch(addToast({ message: msg, type: 'success' }));
       setTxHash('');
       setAmountUSD('');
+      setAmountINR('');
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: string } } };
       const msg = axiosError.response?.data?.error || 'Failed to submit deposit';
@@ -125,6 +165,24 @@ const DepositPage = () => {
           </div>
         </div>
 
+        {/* Live Exchange Rate Card */}
+        <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 flex items-center justify-between mb-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-500/10 rounded-lg">
+              <RefreshCw className={`w-4 h-4 text-indigo-400 ${rateLoading ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium">Conversion Rate (Admin Configured)</p>
+              <p className="text-sm font-bold text-white mt-0.5">
+                {rateLoading ? 'Fetching exchange rates...' : `1 USD = ₹${exchangeRate.toFixed(2)} INR`}
+              </p>
+            </div>
+          </div>
+          <div className="text-xs bg-indigo-500/10 text-indigo-400 px-2.5 py-1 rounded-lg font-semibold border border-indigo-500/20">
+            USDT / INR
+          </div>
+        </div>
+
         <div className="border-t border-gray-800 pt-8">
           <h3 className="text-lg font-semibold text-white mb-4">Submit Payment Details</h3>
           
@@ -143,19 +201,44 @@ const DepositPage = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1.5">Amount Sent (USD)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={amountUSD}
-                onChange={(e) => setAmountUSD(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                placeholder="100.00"
-                required
-                autoComplete="off"
-              />
+            <div className="bg-gray-950/40 p-4 border border-gray-800/80 rounded-2xl space-y-4">
+              <span className="text-xs font-semibold text-indigo-400 block tracking-wider uppercase">USDT to INR Calculator</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Amount Sent (USDT / USD)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={amountUSD}
+                      onChange={(e) => handleUSDChange(e.target.value)}
+                      className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-4 py-3 pl-11 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      placeholder="100.00"
+                      required
+                      autoComplete="off"
+                    />
+                    <span className="absolute left-4 top-3 text-gray-500 font-medium">$</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Equivalent INR to Credit</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={amountINR}
+                      onChange={(e) => handleINRChange(e.target.value)}
+                      className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-4 py-3 pl-11 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      placeholder="8350.00"
+                      required
+                      autoComplete="off"
+                    />
+                    <span className="absolute left-4 top-3 text-gray-500 font-medium">₹</span>
+                  </div>
+                </div>
+              </div>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1.5">Transaction Hash (TxID)</label>
               <input
@@ -168,6 +251,7 @@ const DepositPage = () => {
                 autoComplete="off"
               />
             </div>
+            
             <button
               type="submit"
               disabled={loading}

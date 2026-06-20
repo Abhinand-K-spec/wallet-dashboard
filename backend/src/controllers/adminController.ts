@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import prisma from '../prismaClient';
-import { getWalletOnChainDetails, getOnChainTransactions } from '../utils/blockchain';
+import { getWalletOnChainDetails, getOnChainTransactions, verifyOnChainUSDT } from '../utils/blockchain';
 
 export const getDashboardStats = async (req: AuthRequest, res: Response) => {
   try {
@@ -285,4 +285,128 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const updateExchangeRate = async (req: AuthRequest, res: Response) => {
+  try {
+    const { rate } = req.body;
+
+    if (rate === undefined || isNaN(parseFloat(rate)) || parseFloat(rate) <= 0) {
+      return res.status(400).json({ error: 'A valid exchange rate greater than 0 is required.' });
+    }
+
+    const rateVal = parseFloat(rate).toFixed(4);
+
+    const setting = await prisma.systemSetting.upsert({
+      where: { key: 'USD_INR_RATE' },
+      update: { value: rateVal },
+      create: { key: 'USD_INR_RATE', value: rateVal }
+    });
+
+    // Log the admin action
+    await prisma.adminAction.create({
+      data: {
+        adminId: req.user!.id,
+        action: 'UPDATE_EXCHANGE_RATE',
+        targetId: 'USD_INR_RATE'
+      }
+    });
+
+    res.json({
+      message: `Exchange rate successfully updated to ₹${parseFloat(rateVal).toFixed(2)} INR`,
+      rate: parseFloat(rateVal)
+    });
+  } catch (error) {
+    console.error('Update exchange rate error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getDepositBlockchainStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const { depositId } = req.params;
+    const { refresh } = req.query;
+
+    const deposit = await prisma.walletDeposit.findUnique({
+      where: { id: String(depositId) },
+    });
+
+    if (!deposit) {
+      return res.status(404).json({ error: 'Deposit not found' });
+    }
+
+    const adminWallet = process.env.ADMIN_WALLET_ADDRESS || '0x1234567890abcdef1234567890abcdef12345678';
+    
+    // If already verified on-chain and NOT a forced refresh request, return cached database details!
+    if (deposit.onChainVerified && refresh !== 'true') {
+      return res.json({
+        depositId: deposit.id,
+        txHash: deposit.txHash,
+        submittedAmount: deposit.amountUSD,
+        adminWalletAddress: adminWallet,
+        onChainResult: {
+          success: true,
+          network: deposit.onChainNetwork || 'UNKNOWN',
+          fromAddress: deposit.onChainFrom || '',
+          toAddress: deposit.onChainTo || '',
+          amountUSD: deposit.onChainAmount || 0,
+          txHash: deposit.onChainTxHash || deposit.txHash,
+        }
+      });
+    }
+
+    // Otherwise, perform live on-chain validation
+    const onChainResult = await verifyOnChainUSDT(deposit.txHash, adminWallet);
+
+    // If successful, persist it in the database!
+    if (onChainResult.success) {
+      await prisma.walletDeposit.update({
+        where: { id: deposit.id },
+        data: {
+          onChainVerified: true,
+          onChainNetwork: onChainResult.network,
+          onChainFrom: onChainResult.fromAddress,
+          onChainTo: onChainResult.toAddress,
+          onChainAmount: onChainResult.amountUSD,
+          onChainTxHash: onChainResult.txHash || deposit.txHash,
+        }
+      });
+    }
+
+    res.json({
+      depositId: deposit.id,
+      txHash: deposit.txHash,
+      submittedAmount: deposit.amountUSD,
+      adminWalletAddress: adminWallet,
+      onChainResult,
+    });
+  } catch (error) {
+    console.error('Get deposit blockchain status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const markWithdrawalsDownloaded = async (req: AuthRequest, res: Response) => {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'List of withdrawal IDs is required' });
+    }
+
+    await prisma.withdrawal.updateMany({
+      where: {
+        id: { in: ids }
+      },
+      data: {
+        downloaded: true
+      }
+    });
+
+    res.json({ message: 'Withdrawals successfully marked as downloaded' });
+  } catch (error) {
+    console.error('Mark withdrawals downloaded error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 
