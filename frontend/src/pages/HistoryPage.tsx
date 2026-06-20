@@ -86,8 +86,28 @@ const HistoryPage = () => {
 
   if (loading) return <div className="text-gray-400 p-8">Loading history...</div>;
 
+  // Combine deposits and withdrawals for the "All Transactions" view
+  const combinedTransactions = [
+    ...deposits.map((d) => ({
+      id: d.id,
+      transactionType: 'DEPOSIT',
+      amountUSD: d.amountUSD,
+      amountINR: d.equivalentINR,
+      status: d.status,
+      createdAt: d.createdAt,
+    })),
+    ...withdrawals.map((w) => ({
+      id: w.id,
+      transactionType: 'WITHDRAWAL',
+      amountUSD: w.amountUSD,
+      amountINR: w.amountINR,
+      status: w.status,
+      createdAt: w.createdAt,
+    })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   const tabs: { key: TabType; label: string; count: number }[] = [
-    { key: 'all', label: 'All Transactions', count: transactions.length },
+    { key: 'all', label: 'All Transactions', count: combinedTransactions.length },
     { key: 'deposits', label: 'Deposits', count: deposits.length },
     { key: 'withdrawals', label: 'Withdrawals', count: withdrawals.length },
   ];
@@ -119,7 +139,7 @@ const HistoryPage = () => {
       {/* All Transactions Tab */}
       {activeTab === 'all' && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-lg">
-          {transactions.length === 0 ? (
+          {combinedTransactions.length === 0 ? (
             <div className="p-12 text-center text-gray-500">
               <Activity className="w-16 h-16 mx-auto mb-4 text-gray-700" />
               <p className="text-lg font-medium">No transactions yet</p>
@@ -137,7 +157,7 @@ const HistoryPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {transactions.map((tx) => (
+                {combinedTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-gray-800/20 transition-colors">
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium ${

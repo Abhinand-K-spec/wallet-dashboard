@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { addToast } from '../store/toastSlice';
 import api from '../api/axios';
-import { Users, ArrowDownToLine, ArrowUpFromLine, Clock, Coins, Copy, Check, ExternalLink, AlertTriangle, Wallet } from 'lucide-react';
+import { Users, ArrowDownToLine, ArrowUpFromLine, Clock, Coins, Copy, Check, ExternalLink, AlertTriangle, Wallet, RefreshCw, Loader2 } from 'lucide-react';
 
 interface WalletDetails {
   address: string;
@@ -32,6 +34,43 @@ const AdminDashboard = () => {
   const [copied, setCopied] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+
+  const [appRate, setAppRate] = useState<number | null>(null);
+  const [rateInput, setRateInput] = useState('');
+  const [rateUpdating, setRateUpdating] = useState(false);
+
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    const fetchRate = async () => {
+      try {
+        const res = await api.get('/user/rate');
+        setAppRate(res.data.rate);
+        setRateInput(String(res.data.rate));
+      } catch (err) {
+        console.error('Error fetching rate:', err);
+      }
+    };
+    fetchRate();
+  }, []);
+
+  const handleUpdateRate = async () => {
+    if (!rateInput || isNaN(parseFloat(rateInput)) || parseFloat(rateInput) <= 0) {
+      dispatch(addToast({ message: 'Please enter a valid exchange rate.', type: 'error' }));
+      return;
+    }
+    setRateUpdating(true);
+    try {
+      const res = await api.post('/admin/settings/rate', { rate: rateInput });
+      dispatch(addToast({ message: res.data.message || 'Exchange rate updated successfully.', type: 'success' }));
+      setAppRate(res.data.rate);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Failed to update exchange rate.';
+      dispatch(addToast({ message: msg, type: 'error' }));
+    } finally {
+      setRateUpdating(false);
+    }
+  };
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -118,7 +157,9 @@ const AdminDashboard = () => {
       {/* Admin Wallet Details Section */}
       {stats?.walletDetails && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
-          <div className="lg:col-span-1 bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col justify-between shadow-lg">
+          <div className="lg:col-span-1 space-y-6">
+            {/* Admin Wallet Details Card */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col justify-between shadow-lg">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -174,6 +215,49 @@ const AdminDashboard = () => {
                 </div>
               </div>
             )}
+            </div>
+
+            {/* Application Exchange Rate Settings Card */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-lg space-y-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-indigo-400" />
+                Application Exchange Rate
+              </h2>
+              <p className="text-xs text-gray-400 leading-relaxed">Configure the USD to INR conversion rate applied globally for user withdrawals.</p>
+              
+              <div className="bg-gray-950 p-4 rounded-xl border border-gray-800/80 flex items-center justify-between">
+                <span className="text-xs text-gray-400 font-medium">Active Rate:</span>
+                <span className="text-lg font-bold text-emerald-400">
+                  {appRate !== null ? `₹${appRate.toFixed(2)}` : 'Loading...'}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Set Exchange Rate (₹ per $1.00)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={rateInput}
+                      onChange={e => setRateInput(e.target.value)}
+                      className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 pl-7"
+                      placeholder="83.50"
+                    />
+                    <span className="absolute left-3 top-2.5 text-gray-500 text-sm">₹</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleUpdateRate}
+                  disabled={rateUpdating}
+                  className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition-all disabled:opacity-50"
+                >
+                  {rateUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Update Application Rate
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-lg">

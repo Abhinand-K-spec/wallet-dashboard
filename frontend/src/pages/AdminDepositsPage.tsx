@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { addToast } from '../store/toastSlice';
 import api from '../api/axios';
-import { ArrowDownToLine, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle2, XCircle, Clock, Loader2, ShieldCheck, ShieldAlert, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Deposit {
   id: string;
@@ -23,6 +23,232 @@ const statusBadge = (status: string) => {
     REJECTED: 'bg-red-500/10 text-red-400 border-red-500/30',
   };
   return `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${styles[status] || 'bg-gray-500/10 text-gray-400'}`;
+};
+
+interface BlockchainStatusCheckerProps {
+  depositId: string;
+}
+
+interface OnChainResult {
+  success: boolean;
+  network: string;
+  fromAddress: string;
+  toAddress: string;
+  amountUSD: number;
+  txHash?: string;
+  message?: string;
+}
+
+interface BlockchainStatusData {
+  depositId: string;
+  txHash: string;
+  submittedAmount: number;
+  adminWalletAddress: string;
+  onChainResult: OnChainResult;
+}
+
+const BlockchainStatusChecker = ({ depositId }: BlockchainStatusCheckerProps) => {
+  const [data, setData] = useState<BlockchainStatusData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchStatus = async (isRefresh: boolean = false) => {
+    setLoading(true);
+    setError('');
+    try {
+      const url = `/admin/deposit/${depositId}/blockchain-status` + (isRefresh ? '?refresh=true' : '');
+      const res = await api.get(url);
+      setData(res.data);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.response?.data?.error || 'Failed to fetch blockchain status.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus(false);
+  }, [depositId]);
+
+  const handleRefresh = () => fetchStatus(true);
+
+  if (loading) {
+    return (
+      <div className="mt-4 sm:ml-12 p-4 bg-gray-950 border border-gray-800 rounded-xl flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+          <span>Verifying transaction hash on-chain...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mt-4 sm:ml-12 p-4 bg-red-500/5 border border-red-500/10 rounded-xl flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-red-400">
+          <ShieldAlert className="w-4 h-4 shrink-0" />
+          <span>Verification failed: {error}</span>
+        </div>
+        <button
+          onClick={handleRefresh}
+          className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium transition-colors"
+        >
+          <RefreshCw className="w-3 h-3" /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!data || !data.onChainResult) return null;
+
+  const result = data.onChainResult;
+  const isAmountMatch = Math.abs(result.amountUSD - data.submittedAmount) < 0.001;
+  const isRecipientMatch = result.toAddress?.toLowerCase() === data.adminWalletAddress?.toLowerCase();
+  const isHashMatch = result.txHash?.toLowerCase() === data.txHash?.toLowerCase();
+
+  return (
+    <div className="mt-4 sm:ml-12">
+      {result.success ? (
+        isAmountMatch ? (
+          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-semibold text-emerald-400">
+                  On-Chain Verification: Success ({result.network})
+                </span>
+              </div>
+              <button
+                onClick={handleRefresh}
+                className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 font-medium transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" /> Re-verify
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+                <span className="text-gray-500 block mb-0.5">On-Chain Amount</span>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white">${result.amountUSD.toFixed(2)}</span>
+                  <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded">Matches</span>
+                </div>
+              </div>
+
+              <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+                <span className="text-gray-500 block mb-0.5">Tx Hash Match</span>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-indigo-400 truncate max-w-[120px]" title={result.txHash || data.txHash}>
+                    {result.txHash || data.txHash}
+                  </span>
+                  {isHashMatch ? (
+                    <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded">Matches</span>
+                  ) : (
+                    <span className="text-[10px] font-semibold bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded">Mismatch</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+                <span className="text-gray-500 block mb-0.5">Recipient Address</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-gray-300 truncate" title={result.toAddress}>
+                    {result.toAddress || 'N/A'}
+                  </span>
+                  {isRecipientMatch ? (
+                    <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded shrink-0">Matches Admin Wallet</span>
+                  ) : (
+                    <span className="text-[10px] font-semibold bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded shrink-0" title={`Expected admin: ${data.adminWalletAddress}`}>Mismatch</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-semibold text-amber-400">
+                  On-Chain Verification: Warning (Amount Mismatch)
+                </span>
+              </div>
+              <button
+                onClick={handleRefresh}
+                className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 font-medium transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" /> Re-verify
+              </button>
+            </div>
+
+            <p className="text-xs text-amber-400/90 leading-relaxed font-medium">
+              Alert: The transaction hash matches, but the on-chain amount (${result.amountUSD.toFixed(2)}) does not match the submitted amount (${data.submittedAmount.toFixed(2)}).
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+                <span className="text-gray-500 block mb-0.5">On-Chain Amount</span>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-red-400">${result.amountUSD.toFixed(2)}</span>
+                  <span className="text-[10px] font-semibold bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded">Mismatch</span>
+                </div>
+              </div>
+
+              <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+                <span className="text-gray-500 block mb-0.5">Tx Hash Match</span>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-indigo-400 truncate max-w-[120px]" title={result.txHash || data.txHash}>
+                    {result.txHash || data.txHash}
+                  </span>
+                  {isHashMatch ? (
+                    <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded">Matches</span>
+                  ) : (
+                    <span className="text-[10px] font-semibold bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded">Mismatch</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+                <span className="text-gray-500 block mb-0.5">Recipient Address</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-gray-300 truncate" title={result.toAddress}>
+                    {result.toAddress || 'N/A'}
+                  </span>
+                  {isRecipientMatch ? (
+                    <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded shrink-0">Matches Admin Wallet</span>
+                  ) : (
+                    <span className="text-[10px] font-semibold bg-orange-500/10 text-orange-400 px-1.5 py-0.5 rounded shrink-0" title={`Expected admin: ${data.adminWalletAddress}`}>Mismatch</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+              <span className="text-xs font-semibold text-red-400">
+                On-Chain Verification: Failed ({result.network})
+              </span>
+            </div>
+            <button
+              onClick={handleRefresh}
+              className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 font-medium transition-colors"
+            >
+              <RefreshCw className="w-3 h-3" /> Re-verify
+            </button>
+          </div>
+          <p className="text-xs text-red-400/90 leading-relaxed">
+            {result.message || 'Transaction could not be found or verified on-chain.'}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const AdminDepositsPage = () => {
@@ -144,6 +370,7 @@ const AdminDepositsPage = () => {
                     </button>
                   </div>
                 </div>
+                <BlockchainStatusChecker depositId={deposit.id} />
               </div>
             ))}
           </div>

@@ -142,7 +142,7 @@ const DepositPage = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1.5">Amount Sent (USD)</label>
               <input
@@ -153,6 +153,7 @@ const DepositPage = () => {
                 className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 placeholder="100.00"
                 required
+                autoComplete="off"
               />
             </div>
             <div>
@@ -164,6 +165,7 @@ const DepositPage = () => {
                 className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 placeholder="0x..."
                 required
+                autoComplete="off"
               />
             </div>
             <button

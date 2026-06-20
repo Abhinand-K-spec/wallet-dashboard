@@ -20,13 +20,12 @@ const WithdrawPage = () => {
     let active = true;
     const fetchRate = async () => {
       try {
-        const res = await fetch('https://open.er-api.com/v6/latest/USD');
-        const data = await res.json();
-        if (active && data && data.rates && typeof data.rates.INR === 'number') {
-          setInrRate(data.rates.INR);
+        const res = await api.get('/user/rate');
+        if (active && res.data && typeof res.data.rate === 'number') {
+          setInrRate(res.data.rate);
         }
       } catch (err) {
-        console.warn('Failed to fetch real-time USD/INR rate:', err);
+        console.warn('Failed to fetch custom USD/INR rate from backend:', err);
       } finally {
         if (active) {
           setRateLoading(false);
