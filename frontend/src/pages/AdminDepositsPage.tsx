@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 import { addToast } from '../store/toastSlice';
 import api from '../api/axios';
@@ -52,24 +52,27 @@ const BlockchainStatusChecker = ({ depositId }: BlockchainStatusCheckerProps) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchStatus = async (isRefresh: boolean = false) => {
+  const fetchStatus = useCallback(async (isRefresh: boolean = false) => {
     setLoading(true);
     setError('');
     try {
       const url = `/admin/deposit/${depositId}/blockchain-status` + (isRefresh ? '?refresh=true' : '');
       const res = await api.get(url);
       setData(res.data);
-    } catch (err: any) {
-      console.error(err);
-      setError(err.response?.data?.error || 'Failed to fetch blockchain status.');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      console.error(axiosError);
+      setError(axiosError.response?.data?.error || 'Failed to fetch blockchain status.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [depositId]);
 
   useEffect(() => {
-    fetchStatus(false);
-  }, [depositId]);
+    Promise.resolve().then(() => {
+      fetchStatus(false);
+    });
+  }, [fetchStatus]);
 
   const handleRefresh = () => fetchStatus(true);
 

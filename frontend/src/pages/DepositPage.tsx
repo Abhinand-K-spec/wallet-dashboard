@@ -51,7 +51,9 @@ const DepositPage = () => {
   useEffect(() => {
     if (walletAddress && walletAddress !== 'Loading address...' && walletAddress !== 'Error fetching address') {
       const isTron = walletAddress.startsWith('T');
-      setQrSrc(isTron ? '/tron_qr.jpeg' : '/eth_qr.png');
+      Promise.resolve().then(() => {
+        setQrSrc(isTron ? '/tron_qr.jpeg' : '/eth_qr.png');
+      });
     }
   }, [walletAddress]);
 

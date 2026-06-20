@@ -90,9 +90,9 @@ const AdminUsersPage = () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [page, search, statusFilter, roleFilter, refreshKey]);
+  }, [page, search, statusFilter, roleFilter, refreshKey, dispatch]);
 
-  const handleToggleStatus = async (userId: string, currentStatus: string) => {
+  const handleToggleStatus = async (userId: string) => {
     if (userId === currentAdmin?.id) {
       dispatch(addToast({ message: 'You cannot suspend your own account.', type: 'error' }));
       return;
@@ -103,8 +103,9 @@ const AdminUsersPage = () => {
       const res = await api.post(`/admin/user/${userId}/toggle-status`);
       dispatch(addToast({ message: res.data.message || 'User status updated successfully.', type: 'success' }));
       setRefreshKey(prev => prev + 1);
-    } catch (err: any) {
-      const msg = err.response?.data?.error || 'Failed to update user status.';
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      const msg = axiosError.response?.data?.error || 'Failed to update user status.';
       dispatch(addToast({ message: msg, type: 'error' }));
     } finally {
       setActionLoading(null);
@@ -279,7 +280,7 @@ const AdminUsersPage = () => {
                             </span>
                           ) : (
                             <button
-                              onClick={() => handleToggleStatus(u.id, u.status)}
+                              onClick={() => handleToggleStatus(u.id)}
                               disabled={actionLoading === u.id}
                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border shadow-sm ${
                                 isSuspended

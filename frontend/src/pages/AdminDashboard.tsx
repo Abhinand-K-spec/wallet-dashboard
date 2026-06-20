@@ -64,8 +64,9 @@ const AdminDashboard = () => {
       const res = await api.post('/admin/settings/rate', { rate: rateInput });
       dispatch(addToast({ message: res.data.message || 'Exchange rate updated successfully.', type: 'success' }));
       setAppRate(res.data.rate);
-    } catch (err: any) {
-      const msg = err.response?.data?.error || 'Failed to update exchange rate.';
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } } };
+      const msg = error.response?.data?.error || 'Failed to update exchange rate.';
       dispatch(addToast({ message: msg, type: 'error' }));
     } finally {
       setRateUpdating(false);

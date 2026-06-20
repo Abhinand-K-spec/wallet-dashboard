@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
-import { ArrowDownToLine, ArrowUpFromLine, Activity, DollarSign, Wallet } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, Activity, Wallet } from 'lucide-react';
 
 interface Deposit {
   id: string;

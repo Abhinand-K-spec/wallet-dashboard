@@ -123,7 +123,7 @@ const AdminWithdrawalsPage = () => {
       dispatch(addToast({ message: `Successfully downloaded CSV for ${selectedWithdrawals.length} requests!`, type: 'success' }));
     } catch (err) {
       console.error('Failed to mark withdrawals as downloaded:', err);
-      dispatch(addToast({ message: 'CSV downloaded, but failed to save status to database', type: 'warning' }));
+      dispatch(addToast({ message: 'CSV downloaded, but failed to save status to database', type: 'error' }));
     }
   };
 

@@ -2,15 +2,6 @@ import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { ArrowDownToLine, ArrowUpFromLine, Activity, Clock, CheckCircle2, XCircle } from 'lucide-react';
 
-interface Transaction {
-  id: string;
-  transactionType: string;
-  amountUSD: number;
-  amountINR: number | null;
-  reference: string | null;
-  status: string;
-  createdAt: string;
-}
 
 interface Deposit {
   id: string;
@@ -65,7 +56,6 @@ const statusBadge = (status: string) => {
 type TabType = 'all' | 'deposits' | 'withdrawals';
 
 const HistoryPage = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +65,6 @@ const HistoryPage = () => {
     const fetchData = async () => {
       try {
         const res = await api.get('/user/transactions');
-        setTransactions(res.data.transactions);
         setDeposits(res.data.deposits);
         setWithdrawals(res.data.withdrawals);
       } catch (err) {

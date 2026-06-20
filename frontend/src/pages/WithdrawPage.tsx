@@ -1,10 +1,22 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, useCallback, type FormEvent } from 'react';
 import { useDispatch } from 'react-redux';
 import { addToast } from '../store/toastSlice';
 import api from '../api/axios';
-import { Building2, Landmark, CheckCircle2, Loader2, AlertCircle, RefreshCw, DollarSign, Wallet, ArrowRight } from 'lucide-react';
+import { Building2, Landmark, CheckCircle2, Loader2, AlertCircle, RefreshCw, DollarSign, Wallet } from 'lucide-react';
 
 type MethodType = 'BANK' | 'USDT';
+
+interface DepositItem {
+  status: string;
+  equivalentINR: number | null;
+  amountUSD: number;
+  adminEnteredRate: number | null;
+}
+
+interface WithdrawalItem {
+  status: string;
+  amountINR: number;
+}
 
 const WithdrawPage = () => {
   const [method, setMethod] = useState<MethodType>('BANK');
@@ -26,23 +38,23 @@ const WithdrawPage = () => {
 
   const dispatch = useDispatch();
 
-  const fetchProfileAndBalance = async () => {
+  const fetchProfileAndBalance = useCallback(async () => {
     try {
       const res = await api.get('/user/profile');
       const user = res.data;
       const totalDepositsINR = (user.deposits || [])
-        .filter((d: any) => d.status === 'APPROVED')
-        .reduce((acc: number, d: any) => acc + (d.equivalentINR ?? (d.amountUSD * (d.adminEnteredRate ?? 83.50))), 0);
+        .filter((d: DepositItem) => d.status === 'APPROVED')
+        .reduce((acc: number, d: DepositItem) => acc + (d.equivalentINR ?? (d.amountUSD * (d.adminEnteredRate ?? 83.50))), 0);
       const totalWithdrawalsINR = (user.withdrawals || [])
-        .filter((w: any) => ['PENDING', 'APPROVED', 'PAID'].includes(w.status))
-        .reduce((acc: number, w: any) => acc + w.amountINR, 0);
+        .filter((w: WithdrawalItem) => ['PENDING', 'APPROVED', 'PAID'].includes(w.status))
+        .reduce((acc: number, w: WithdrawalItem) => acc + w.amountINR, 0);
       setBalanceINR(totalDepositsINR - totalWithdrawalsINR);
     } catch (err) {
       console.error('Failed to fetch profile/balance:', err);
     } finally {
       setBalanceLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -61,13 +73,15 @@ const WithdrawPage = () => {
       }
     };
 
-    fetchRate();
-    fetchProfileAndBalance();
+    Promise.resolve().then(() => {
+      fetchRate();
+      fetchProfileAndBalance();
+    });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [fetchProfileAndBalance]);
 
   const handleINRChange = (val: string) => {
     setAmountINR(val);
@@ -140,7 +154,15 @@ const WithdrawPage = () => {
     }
 
     try {
-      const payload: any = {
+      const payload: {
+        method: MethodType;
+        accountHolder: string;
+        amountINR?: string;
+        accountNumber?: string;
+        ifsc?: string;
+        amountUSD?: string;
+        walletAddress?: string;
+      } = {
         method,
         accountHolder,
       };
