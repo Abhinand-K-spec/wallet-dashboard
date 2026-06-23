@@ -21,6 +21,9 @@ enum DepositStatus {
   PENDING
   APPROVED
   REJECTED
+  SUCCESS
+  FAILED
+  EXPIRED
 }
 
 enum WithdrawalStatus {
@@ -62,7 +65,7 @@ model WalletDeposit {
   userId           String
   user             User          @relation(fields: [userId], references: [id])
   walletAddress    String?       // Address user sent FROM
-  txHash           String        @unique
+  txHash           String?       @unique
   amountUSD        Float
   equivalentINR    Float?
   adminEnteredRate Float?
@@ -75,6 +78,13 @@ model WalletDeposit {
   onChainTo        String?
   onChainAmount    Float?
   onChainTxHash    String?
+
+  // Dynamic Payment System fields
+  orderId          String?       @unique
+  network          String?       @default("TRC20")
+  currency         String?       @default("USDT")
+  expiresAt        DateTime?
+  qrPayload        String?
 }
 
 model Transaction {

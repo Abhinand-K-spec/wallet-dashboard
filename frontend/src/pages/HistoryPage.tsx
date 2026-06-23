@@ -30,11 +30,13 @@ const statusIcon = (status: string) => {
     case 'COMPLETED':
     case 'APPROVED':
     case 'PAID':
+    case 'SUCCESS':
       return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
     case 'PENDING':
       return <Clock className="w-4 h-4 text-amber-400" />;
     case 'REJECTED':
     case 'FAILED':
+    case 'EXPIRED':
       return <XCircle className="w-4 h-4 text-red-400" />;
     default:
       return <Activity className="w-4 h-4 text-gray-400" />;
@@ -46,9 +48,11 @@ const statusBadge = (status: string) => {
     PENDING: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
     APPROVED: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
     COMPLETED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    SUCCESS: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
     PAID: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
     REJECTED: 'bg-red-500/10 text-red-400 border-red-500/30',
     FAILED: 'bg-red-500/10 text-red-400 border-red-500/30',
+    EXPIRED: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
   };
   return `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${styles[status] || 'bg-gray-500/10 text-gray-400 border-gray-500/30'}`;
 };
@@ -188,7 +192,7 @@ const HistoryPage = () => {
                             The amount will credit in your ac within 3 hours
                           </span>
                         )}
-                        {(tx.status === 'PAID' || tx.status === 'COMPLETED') && tx.utr && (
+                        {(tx.status === 'PAID' || tx.status === 'COMPLETED' || tx.status === 'SUCCESS') && tx.utr && (
                           <span className="text-[10px] text-indigo-400 font-mono block leading-tight mt-0.5 select-all">
                             TxID/UTR: {tx.utr}
                           </span>
@@ -197,7 +201,7 @@ const HistoryPage = () => {
                     </td>
                     <td className="px-6 py-4 text-gray-500">
                       <div>{new Date(tx.createdAt).toLocaleString()}</div>
-                      {(tx.status === 'PAID' || tx.status === 'COMPLETED') && (
+                      {(tx.status === 'PAID' || tx.status === 'COMPLETED' || tx.status === 'SUCCESS') && (
                         <div className="text-[10px] text-emerald-400 font-semibold mt-1">
                           Paid: {new Date(tx.updatedAt).toLocaleString()}
                         </div>

@@ -7,7 +7,11 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
   try {
     const totalUsers = await prisma.user.count({ where: { role: 'USER' } });
     
-    const deposits = await prisma.walletDeposit.findMany({ where: { status: 'APPROVED' } });
+    const deposits = await prisma.walletDeposit.findMany({
+      where: {
+        status: { in: ['APPROVED', 'SUCCESS'] }
+      }
+    });
     const totalDepositsUSD = deposits.reduce((acc, d) => acc + d.amountUSD, 0);
 
     const withdrawals = await prisma.withdrawal.findMany({ where: { status: 'PAID' } });
@@ -352,6 +356,10 @@ export const getDepositBlockchainStatus = async (req: AuthRequest, res: Response
           txHash: deposit.onChainTxHash || deposit.txHash,
         }
       });
+    }
+
+    if (!deposit.txHash) {
+      return res.status(400).json({ error: 'No transaction hash submitted for this deposit.' });
     }
 
     // Otherwise, perform live on-chain validation

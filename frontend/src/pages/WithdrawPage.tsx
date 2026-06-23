@@ -43,7 +43,7 @@ const WithdrawPage = () => {
       const res = await api.get('/user/profile');
       const user = res.data;
       const totalDepositsINR = (user.deposits || [])
-        .filter((d: DepositItem) => d.status === 'APPROVED')
+        .filter((d: DepositItem) => ['APPROVED', 'SUCCESS'].includes(d.status))
         .reduce((acc: number, d: DepositItem) => acc + (d.equivalentINR ?? (d.amountUSD * (d.adminEnteredRate ?? 83.50))), 0);
       const totalWithdrawalsINR = (user.withdrawals || [])
         .filter((w: WithdrawalItem) => ['PENDING', 'APPROVED', 'PAID'].includes(w.status))

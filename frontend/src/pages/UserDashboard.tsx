@@ -55,11 +55,11 @@ const UserDashboard = () => {
 
   if (loading) return <div className="text-gray-400">Loading dashboard...</div>;
 
-  const totalDepositsINR = profile?.deposits?.filter((d: Deposit) => d.status === 'APPROVED').reduce((acc: number, d: Deposit) => acc + (d.equivalentINR ?? (d.amountUSD * (d.adminEnteredRate ?? 83.50))), 0) || 0;
+  const totalDepositsINR = profile?.deposits?.filter((d: Deposit) => ['APPROVED', 'SUCCESS'].includes(d.status)).reduce((acc: number, d: Deposit) => acc + (d.equivalentINR ?? (d.amountUSD * (d.adminEnteredRate ?? 83.50))), 0) || 0;
   const totalWithdrawalsINR = profile?.withdrawals?.filter((w: Withdrawal) => ['APPROVED', 'PAID'].includes(w.status)).reduce((acc: number, w: Withdrawal) => acc + w.amountINR, 0) || 0;
   const availableBalanceINR = totalDepositsINR - totalWithdrawalsINR;
 
-  const totalDepositsUSD = profile?.deposits?.filter((d: Deposit) => d.status === 'APPROVED').reduce((acc: number, d: Deposit) => acc + d.amountUSD, 0) || 0;
+  const totalDepositsUSD = profile?.deposits?.filter((d: Deposit) => ['APPROVED', 'SUCCESS'].includes(d.status)).reduce((acc: number, d: Deposit) => acc + d.amountUSD, 0) || 0;
   const totalWithdrawalsUSD = profile?.withdrawals?.filter((w: Withdrawal) => ['APPROVED', 'PAID'].includes(w.status)).reduce((acc: number, w: Withdrawal) => acc + w.amountUSD, 0) || 0;
   const availableBalanceUSD = totalDepositsUSD - totalWithdrawalsUSD;
 

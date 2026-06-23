@@ -1,268 +1,218 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { addToast } from '../store/toastSlice';
 import api from '../api/axios';
-import { QrCode, Copy, CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { RefreshCw, ArrowLeft, Loader2 } from 'lucide-react';
+import { PaymentAmountInput } from '../components/PaymentAmountInput';
+import { DynamicPaymentQR } from '../components/DynamicPaymentQR';
+import { useQuery, useMutation } from '@tanstack/react-query';
+
+interface RateResponse {
+  rate: number;
+}
+
+interface PaymentOrderResponse {
+  orderId: string;
+  walletAddress: string;
+  amount: string;
+  network: string;
+  qrPayload: string;
+  expiresAt: string;
+}
+
+interface PaymentStatusResponse {
+  status: 'PENDING' | 'SUCCESS' | 'EXPIRED' | 'FAILED';
+  orderId: string;
+  amount: string;
+  txHash?: string;
+}
 
 const DepositPage = () => {
-  const [txHash, setTxHash] = useState('');
-  const [amountUSD, setAmountUSD] = useState('');
-  const [amountINR, setAmountINR] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState('');
-  const [error, setError] = useState('');
-
-  const [copied, setCopied] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('Loading address...');
-  const [qrSrc, setQrSrc] = useState('/admin_qr.png');
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState<'USDT' | 'INR'>('USDT');
   const [exchangeRate, setExchangeRate] = useState<number>(83.50);
   const [rateLoading, setRateLoading] = useState(true);
   const dispatch = useDispatch();
 
-  useEffect(() => {
-    const fetchAddress = async () => {
-      try {
-        const res = await api.get('/user/deposit-address');
-        setWalletAddress(res.data.walletAddress);
-      } catch (err) {
-        console.error('Failed to fetch wallet address:', err);
-        setWalletAddress('Error fetching address');
-      }
-    };
-    fetchAddress();
-  }, []);
+  // Active Payment State
+  const [paymentState, setPaymentState] = useState<'idle' | 'creating' | 'generated' | 'expired' | 'paid' | 'failed'>('idle');
+  const [activeOrder, setActiveOrder] = useState<PaymentOrderResponse | null>(null);
+
+  // Fetch Exchange Rate
+  const fetchRate = async () => {
+    const res = await api.get<RateResponse>('/user/rate');
+    return res.data;
+  };
+
+  const { data: rateData, isFetching: isRateFetching } = useQuery({
+    queryKey: ['exchangeRate'],
+    queryFn: fetchRate,
+    refetchInterval: 60000, // Refresh rate every minute
+  });
 
   useEffect(() => {
-    const fetchRate = async () => {
-      try {
-        const res = await api.get('/user/rate');
-        if (res.data && typeof res.data.rate === 'number') {
-          setExchangeRate(res.data.rate);
-        }
-      } catch (err) {
-        console.error('Failed to fetch exchange rate:', err);
-      } finally {
-        setRateLoading(false);
-      }
-    };
-    fetchRate();
-  }, []);
-
-  useEffect(() => {
-    if (walletAddress && walletAddress !== 'Loading address...' && walletAddress !== 'Error fetching address') {
-      const isTron = walletAddress.startsWith('T');
+    if (rateData && typeof rateData.rate === 'number') {
       Promise.resolve().then(() => {
-        setQrSrc(isTron ? '/tron_qr.jpeg' : '/eth_qr.png');
+        setExchangeRate(rateData.rate);
+        setRateLoading(false);
       });
     }
-  }, [walletAddress]);
+  }, [rateData]);
 
-  const handleQrError = () => {
-    if (walletAddress && walletAddress !== 'Loading address...' && walletAddress !== 'Error fetching address') {
-      const isTron = walletAddress.startsWith('T');
-      
-      // If Ethereum's /eth_qr.png fails, try /admin_qr.png before falling back to the API generator
-      if (!isTron && qrSrc === '/eth_qr.png') {
-        setQrSrc('/admin_qr.png');
-        return;
-      }
-
-      const dynamicUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(walletAddress)}`;
-      if (qrSrc !== dynamicUrl) {
-        setQrSrc(dynamicUrl);
-      }
-    }
-  };
-
-  const copyToClipboard = () => {
-    if (walletAddress && walletAddress !== 'Loading address...' && walletAddress !== 'Error fetching address') {
-      navigator.clipboard.writeText(walletAddress);
-      setCopied(true);
-      dispatch(addToast({ message: 'Address copied to clipboard!', type: 'success' }));
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleUSDChange = (val: string) => {
-    setAmountUSD(val);
-    const num = parseFloat(val);
-    if (!isNaN(num)) {
-      setAmountINR((num * exchangeRate).toFixed(2));
-    } else {
-      setAmountINR('');
-    }
-  };
-
-  const handleINRChange = (val: string) => {
-    setAmountINR(val);
-    const num = parseFloat(val);
-    if (!isNaN(num)) {
-      setAmountUSD((num / exchangeRate).toFixed(2));
-    } else {
-      setAmountUSD('');
-    }
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      await api.post('/user/deposit', {
-        txHash,
-        amountUSD,
+  // Create Payment Order Mutation
+  const createOrderMutation = useMutation({
+    mutationFn: async (payload: { amount: string; currency: 'USDT' | 'INR' }) => {
+      const res = await api.post<PaymentOrderResponse>('/payments/create', payload);
+      return res.data;
+    },
+    onMutate: () => {
+      setPaymentState('creating');
+    },
+    onSuccess: (data) => {
+      setActiveOrder(data);
+      setPaymentState('generated');
+      dispatch(addToast({ message: 'Payment order generated successfully!', type: 'success' }));
+      // Automatically redirect/open Trust Wallet via the deep link
+      window.location.href = data.qrPayload;
+    },
+    onError: (err: unknown) => {
+      Promise.resolve().then(() => {
+        setPaymentState('idle');
       });
-      const msg = `Deposit submitted successfully! Crediting approximately ₹${parseFloat(amountINR || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })} INR. Pending admin verification.`;
-      setSuccess(msg);
-      dispatch(addToast({ message: msg, type: 'success' }));
-      setTxHash('');
-      setAmountUSD('');
-      setAmountINR('');
-    } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: string } } };
-      const msg = axiosError.response?.data?.error || 'Failed to submit deposit';
-      setError(msg);
-      dispatch(addToast({ message: msg, type: 'error' }));
-    } finally {
-      setLoading(false);
+      const errMsg = axiosError.response?.data?.error || 'Failed to generate payment order.';
+      dispatch(addToast({ message: errMsg, type: 'error' }));
+    },
+  });
+
+  // Poll Payment Order Status Query
+  const { data: statusData } = useQuery({
+    queryKey: ['paymentStatus', activeOrder?.orderId],
+    queryFn: async () => {
+      const res = await api.get<PaymentStatusResponse>(`/payments/status/${activeOrder?.orderId}`);
+      return res.data;
+    },
+    enabled: !!activeOrder?.orderId && paymentState === 'generated',
+    refetchInterval: (query) => {
+      // Poll every 5 seconds if order is generated and pending
+      const status = query.state.data?.status;
+      if (status === 'SUCCESS' || status === 'EXPIRED' || status === 'FAILED') {
+        return false;
+      }
+      return 5000;
+    },
+    retry: 3,
+  });
+
+  // Respond to status changes
+  useEffect(() => {
+    if (!statusData) return;
+
+    if (statusData.status === 'SUCCESS') {
+      Promise.resolve().then(() => {
+        setPaymentState('paid');
+      });
+      dispatch(addToast({ message: 'Deposit verified and credited!', type: 'success' }));
+    } else if (statusData.status === 'EXPIRED') {
+      Promise.resolve().then(() => {
+        setPaymentState('expired');
+      });
+      dispatch(addToast({ message: 'Payment order has expired.', type: 'error' }));
+    } else if (statusData.status === 'FAILED') {
+      Promise.resolve().then(() => {
+        setPaymentState('failed');
+      });
+      dispatch(addToast({ message: 'Payment verification failed.', type: 'error' }));
     }
+  }, [statusData, dispatch]);
+
+  const handleGenerate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!amount || parseFloat(amount) <= 0) {
+      dispatch(addToast({ message: 'Please enter an amount greater than 0', type: 'error' }));
+      return;
+    }
+    createOrderMutation.mutate({ amount, currency });
+  };
+
+  const handleReset = () => {
+    setPaymentState('idle');
+    setActiveOrder(null);
+    setAmount('');
   };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <h1 className="text-3xl font-bold text-white tracking-tight">Deposit Funds</h1>
-        <p className="text-gray-400 mt-2">Send USDT (TRC20/ERC20) to the address below</p>
+        <p className="text-gray-400 mt-2">Send USDT (TRC20) via Trust Wallet for automatic balance credit</p>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-xl">
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-white p-4 rounded-2xl mb-4 shadow-inner flex items-center justify-center min-w-[224px] min-h-[224px]">
-            {walletAddress && walletAddress !== 'Loading address...' && walletAddress !== 'Error fetching address' ? (
-              <img
-                src={qrSrc}
-                alt="Deposit QR Code"
-                className="w-48 h-48 block rounded-lg select-none"
-                onError={handleQrError}
-              />
-            ) : (
-              <QrCode className="w-48 h-48 text-gray-400 animate-pulse" />
-            )}
-          </div>
-          
-          <div className="w-full max-w-md bg-gray-950 rounded-xl p-4 flex items-center justify-between border border-gray-800">
-            <code className="text-sm text-indigo-400 truncate pr-4">{walletAddress}</code>
-            <button onClick={copyToClipboard} className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors flex items-center gap-1.5">
-              {copied ? (
-                <>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                  <span className="text-xs text-emerald-400 font-medium">Copied!</span>
-                </>
-              ) : (
-                <Copy className="w-5 h-5" />
-              )}
-            </button>
-          </div>
-        </div>
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
+        {paymentState === 'idle' || paymentState === 'creating' ? (
+          /* Create Payment Form */
+          <form onSubmit={handleGenerate} className="space-y-6">
+            <PaymentAmountInput
+              amount={amount}
+              currency={currency}
+              onChangeAmount={setAmount}
+              onChangeCurrency={setCurrency}
+              exchangeRate={exchangeRate}
+              disabled={paymentState === 'creating'}
+            />
 
-        {/* Live Exchange Rate Card */}
-        <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 flex items-center justify-between mb-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-500/10 rounded-lg">
-              <RefreshCw className={`w-4 h-4 text-indigo-400 ${rateLoading ? 'animate-spin' : ''}`} />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium">Conversion Rate (Admin Configured)</p>
-              <p className="text-sm font-bold text-white mt-0.5">
-                {rateLoading ? 'Fetching exchange rates...' : `1 USD = ₹${exchangeRate.toFixed(2)} INR`}
-              </p>
-            </div>
-          </div>
-          <div className="text-xs bg-indigo-500/10 text-indigo-400 px-2.5 py-1 rounded-lg font-semibold border border-indigo-500/20">
-            USDT / INR
-          </div>
-        </div>
-
-        <div className="border-t border-gray-800 pt-8">
-          <h3 className="text-lg font-semibold text-white mb-4">Submit Payment Details</h3>
-          
-          {error && (
-            <div className="mb-6 bg-red-500/10 border border-red-500/50 rounded-xl p-4 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-              <p className="text-red-400 text-sm">{error}</p>
-            </div>
-          )}
-          
-          {success && (
-            <div className="mb-6 bg-green-500/10 border border-green-500/50 rounded-xl p-4 flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
-              <p className="text-green-400 text-sm">{success}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
-            <div className="bg-gray-950/40 p-4 border border-gray-800/80 rounded-2xl space-y-4">
-              <span className="text-xs font-semibold text-indigo-400 block tracking-wider uppercase">USDT to INR Calculator</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Amount Sent (USDT / USD)</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={amountUSD}
-                      onChange={(e) => handleUSDChange(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-4 py-3 pl-11 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                      placeholder="100.00"
-                      required
-                      autoComplete="off"
-                    />
-                    <span className="absolute left-4 top-3 text-gray-500 font-medium">$</span>
-                  </div>
+            {/* Live Exchange Rate Card */}
+            <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-500/10 rounded-lg">
+                  <RefreshCw className={`w-4 h-4 text-indigo-400 ${rateLoading || isRateFetching ? 'animate-spin' : ''}`} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Equivalent INR to Credit</label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={amountINR}
-                      onChange={(e) => handleINRChange(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-4 py-3 pl-11 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                      placeholder="8350.00"
-                      required
-                      autoComplete="off"
-                    />
-                    <span className="absolute left-4 top-3 text-gray-500 font-medium">₹</span>
-                  </div>
+                  <p className="text-xs text-gray-500 font-medium">Conversion Rate (Admin Configured)</p>
+                  <p className="text-sm font-bold text-white mt-0.5">
+                    {rateLoading ? 'Fetching exchange rates...' : `1 USD = ₹${exchangeRate.toFixed(2)} INR`}
+                  </p>
                 </div>
+              </div>
+              <div className="text-xs bg-indigo-500/10 text-indigo-400 px-2.5 py-1 rounded-lg font-semibold border border-indigo-500/20">
+                USDT / INR
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1.5">Transaction Hash (TxID)</label>
-              <input
-                type="text"
-                value={txHash}
-                onChange={(e) => setTxHash(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                placeholder="0x..."
-                required
-                autoComplete="off"
-              />
-            </div>
-            
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl py-3.5 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              disabled={paymentState === 'creating' || !amount || parseFloat(amount) <= 0}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl py-3.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base font-semibold"
             >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Submit for Verification'}
+              {paymentState === 'creating' ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Generating Order...
+                </>
+              ) : (
+                'Generate Payment QR'
+              )}
             </button>
           </form>
-        </div>
+        ) : (
+          /* Dynamic Payment QR Display & Countdown */
+          <div className="space-y-4">
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to edit amount
+            </button>
+            <DynamicPaymentQR
+              state={paymentState}
+              walletAddress={activeOrder?.walletAddress}
+              amount={activeOrder?.amount}
+              qrPayload={activeOrder?.qrPayload}
+              expiresAt={activeOrder?.expiresAt}
+              onReset={handleReset}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

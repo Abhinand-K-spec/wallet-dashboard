@@ -96,7 +96,7 @@ export const requestWithdrawal = async (req: AuthRequest, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
       include: {
-        deposits: { where: { status: 'APPROVED' } },
+        deposits: { where: { status: { in: ['APPROVED', 'SUCCESS'] } } },
         withdrawals: { where: { status: { in: ['PENDING', 'APPROVED', 'PAID'] } } },
       },
     });
