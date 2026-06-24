@@ -33,7 +33,11 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/payments', paymentRoutes);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ 
+    status: 'ok',
+    version: '1.0.1',
+    db_url_prefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 45) + '...' : 'undefined'
+  });
 });
 
 const PORT = process.env.PORT || 5000;
