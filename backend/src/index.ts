@@ -1,5 +1,7 @@
 import dotenv from 'dotenv';
-dotenv.config();
+if (!process.env.RENDER) {
+  dotenv.config();
+}
 
 import express from 'express';
 import cors from 'cors';
