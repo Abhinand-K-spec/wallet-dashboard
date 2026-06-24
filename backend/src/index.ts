@@ -37,7 +37,10 @@ app.use('/api/payments', paymentRoutes);
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok',
-    version: '1.0.1',
+    version: '1.0.2',
+    is_render: !!process.env.RENDER,
+    render_val: process.env.RENDER,
+    node_env: process.env.NODE_ENV,
     db_url_prefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 45) + '...' : 'undefined'
   });
 });
