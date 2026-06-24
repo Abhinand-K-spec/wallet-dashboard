@@ -59,8 +59,8 @@ export const DynamicPaymentQR: React.FC<DynamicPaymentQRProps> = ({
     }
   };
 
-  const qrImageUrl = qrPayload
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrPayload)}`
+  const qrImageUrl = walletAddress
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(walletAddress)}`
     : '';
 
   // Render based on state
@@ -207,7 +207,7 @@ export const DynamicPaymentQR: React.FC<DynamicPaymentQRProps> = ({
         </a>
 
         <p className="text-[11px] text-gray-500 mt-3 text-center max-w-xs">
-          Scan this QR code with Trust Wallet or tap "Pay with Trust Wallet" on your phone to pre-populate address and amount.
+          Scan the QR code with your wallet app to load the recipient address, or tap "Pay with Trust Wallet" on mobile to auto-fill the transaction.
         </p>
       </div>
     </div>

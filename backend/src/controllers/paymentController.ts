@@ -42,8 +42,9 @@ export const createPaymentOrder = async (req: AuthRequest, res: Response) => {
     const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
 
-    // Generate tron:RECEIVER_ADDRESS?amount=USER_AMOUNT&contract=TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
-    const qrPayload = `tron:${adminWalletAddress}?amount=${amountUSD.toFixed(2)}&contract=TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`;
+    // Generate Trust Wallet compatible TRC20 USDT payment deep link/QR payload:
+    // https://link.trustwallet.com/send?asset=c195_tTR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t&address=RECEIVER&amount=AMOUNT
+    const qrPayload = `https://link.trustwallet.com/send?asset=c195_tTR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t&address=${adminWalletAddress}&amount=${amountUSD}`;
 
     // Create the PENDING payment in WalletDeposit table
     const deposit = await prisma.walletDeposit.create({

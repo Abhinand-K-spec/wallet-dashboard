@@ -72,8 +72,6 @@ const DepositPage = () => {
       setActiveOrder(data);
       setPaymentState('generated');
       dispatch(addToast({ message: 'Payment order generated successfully!', type: 'success' }));
-      // Automatically redirect/open Trust Wallet via the deep link
-      window.location.href = data.qrPayload;
     },
     onError: (err: unknown) => {
       Promise.resolve().then(() => {
