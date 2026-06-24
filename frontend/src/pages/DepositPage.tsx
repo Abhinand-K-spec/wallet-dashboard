@@ -1,217 +1,365 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useDispatch } from 'react-redux';
 import { addToast } from '../store/toastSlice';
 import api from '../api/axios';
-import { RefreshCw, ArrowLeft, Loader2 } from 'lucide-react';
-import { PaymentAmountInput } from '../components/PaymentAmountInput';
-import { DynamicPaymentQR } from '../components/DynamicPaymentQR';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { QrCode, Copy, CheckCircle2, Loader2, AlertCircle, ExternalLink, Coins, KeyRound, ArrowRight, RefreshCw } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 interface RateResponse {
   rate: number;
 }
 
-interface PaymentOrderResponse {
-  orderId: string;
+interface DepositAddressResponse {
   walletAddress: string;
-  amount: string;
-  network: string;
-  qrPayload: string;
-  expiresAt: string;
-}
-
-interface PaymentStatusResponse {
-  status: 'PENDING' | 'SUCCESS' | 'EXPIRED' | 'FAILED';
-  orderId: string;
-  amount: string;
-  txHash?: string;
 }
 
 const DepositPage = () => {
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState<'USDT' | 'INR'>('USDT');
-  const [exchangeRate, setExchangeRate] = useState<number>(83.50);
-  const [rateLoading, setRateLoading] = useState(true);
   const dispatch = useDispatch();
 
-  // Active Payment State
-  const [paymentState, setPaymentState] = useState<'idle' | 'creating' | 'generated' | 'expired' | 'paid' | 'failed'>('idle');
-  const [activeOrder, setActiveOrder] = useState<PaymentOrderResponse | null>(null);
+  // Form states
+  const [amountUSD, setAmountUSD] = useState('');
+  const [txHash, setTxHash] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Info states
+  const [walletAddress, setWalletAddress] = useState('Loading address...');
+  const [exchangeRate, setExchangeRate] = useState<number>(83.50);
+  const [copied, setCopied] = useState(false);
+
+  // Fetch Wallet Address
+  useEffect(() => {
+    const fetchAddress = async () => {
+      try {
+        const res = await api.get<DepositAddressResponse>('/user/deposit-address');
+        setWalletAddress(res.data.walletAddress);
+      } catch (err) {
+        console.error('Failed to fetch wallet address:', err);
+        setWalletAddress('Error fetching address');
+        dispatch(addToast({ message: 'Failed to fetch admin wallet address.', type: 'error' }));
+      }
+    };
+    fetchAddress();
+  }, [dispatch]);
 
   // Fetch Exchange Rate
-  const fetchRate = async () => {
-    const res = await api.get<RateResponse>('/user/rate');
-    return res.data;
-  };
-
   const { data: rateData, isFetching: isRateFetching } = useQuery({
     queryKey: ['exchangeRate'],
-    queryFn: fetchRate,
+    queryFn: async () => {
+      const res = await api.get<RateResponse>('/user/rate');
+      return res.data;
+    },
     refetchInterval: 60000, // Refresh rate every minute
   });
 
   useEffect(() => {
     if (rateData && typeof rateData.rate === 'number') {
-      Promise.resolve().then(() => {
-        setExchangeRate(rateData.rate);
-        setRateLoading(false);
-      });
+      setExchangeRate(rateData.rate);
     }
   }, [rateData]);
 
-  // Create Payment Order Mutation
-  const createOrderMutation = useMutation({
-    mutationFn: async (payload: { amount: string; currency: 'USDT' | 'INR' }) => {
-      const res = await api.post<PaymentOrderResponse>('/payments/create', payload);
-      return res.data;
-    },
-    onMutate: () => {
-      setPaymentState('creating');
-    },
-    onSuccess: (data) => {
-      setActiveOrder(data);
-      setPaymentState('generated');
-      dispatch(addToast({ message: 'Payment order generated successfully!', type: 'success' }));
-    },
-    onError: (err: unknown) => {
-      Promise.resolve().then(() => {
-        setPaymentState('idle');
-      });
-      const axiosError = err as { response?: { data?: { error?: string } } };
-      const errMsg = axiosError.response?.data?.error || 'Failed to generate payment order.';
-      dispatch(addToast({ message: errMsg, type: 'error' }));
-    },
-  });
-
-  // Poll Payment Order Status Query
-  const { data: statusData } = useQuery({
-    queryKey: ['paymentStatus', activeOrder?.orderId],
-    queryFn: async () => {
-      const res = await api.get<PaymentStatusResponse>(`/payments/status/${activeOrder?.orderId}`);
-      return res.data;
-    },
-    enabled: !!activeOrder?.orderId && paymentState === 'generated',
-    refetchInterval: (query) => {
-      // Poll every 5 seconds if order is generated and pending
-      const status = query.state.data?.status;
-      if (status === 'SUCCESS' || status === 'EXPIRED' || status === 'FAILED') {
-        return false;
-      }
-      return 5000;
-    },
-    retry: 3,
-  });
-
-  // Respond to status changes
-  useEffect(() => {
-    if (!statusData) return;
-
-    if (statusData.status === 'SUCCESS') {
-      Promise.resolve().then(() => {
-        setPaymentState('paid');
-      });
-      dispatch(addToast({ message: 'Deposit verified and credited!', type: 'success' }));
-    } else if (statusData.status === 'EXPIRED') {
-      Promise.resolve().then(() => {
-        setPaymentState('expired');
-      });
-      dispatch(addToast({ message: 'Payment order has expired.', type: 'error' }));
-    } else if (statusData.status === 'FAILED') {
-      Promise.resolve().then(() => {
-        setPaymentState('failed');
-      });
-      dispatch(addToast({ message: 'Payment verification failed.', type: 'error' }));
+  // Handle address copy
+  const copyToClipboard = () => {
+    if (walletAddress && walletAddress !== 'Loading address...' && walletAddress !== 'Error fetching address') {
+      navigator.clipboard.writeText(walletAddress);
+      setCopied(true);
+      dispatch(addToast({ message: 'Address copied to clipboard!', type: 'success' }));
+      setTimeout(() => setCopied(false), 2000);
     }
-  }, [statusData, dispatch]);
+  };
 
-  const handleGenerate = (e: React.FormEvent) => {
+  // Generate QR URL
+  const qrImageUrl = walletAddress && walletAddress !== 'Loading address...' && walletAddress !== 'Error fetching address'
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(walletAddress)}`
+    : '';
+
+  // Generate deep link for Trust Wallet (TRC20 USDT)
+  const isTron = walletAddress.startsWith('T');
+  const qrPayload = isTron
+    ? `https://link.trustwallet.com/send?asset=c195_tTR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t&address=${walletAddress}`
+    : `https://link.trustwallet.com/send?address=${walletAddress}`;
+
+  // Form submission handler
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!amount || parseFloat(amount) <= 0) {
-      dispatch(addToast({ message: 'Please enter an amount greater than 0', type: 'error' }));
+    if (!amountUSD || parseFloat(amountUSD) <= 0) {
+      dispatch(addToast({ message: 'Please enter a valid amount greater than 0.', type: 'error' }));
       return;
     }
-    createOrderMutation.mutate({ amount, currency });
+    if (!txHash.trim()) {
+      dispatch(addToast({ message: 'Please enter the transaction hash.', type: 'error' }));
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      await api.post('/user/deposit', {
+        txHash: txHash.trim(),
+        amountUSD: parseFloat(amountUSD),
+      });
+
+      const msg = 'Deposit submitted successfully! Pending admin verification.';
+      setSuccessMsg(msg);
+      dispatch(addToast({ message: msg, type: 'success' }));
+      
+      // Clear inputs
+      setAmountUSD('');
+      setTxHash('');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      const msg = axiosError.response?.data?.error || 'Failed to submit deposit.';
+      setErrorMsg(msg);
+      dispatch(addToast({ message: msg, type: 'error' }));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReset = () => {
-    setPaymentState('idle');
-    setActiveOrder(null);
-    setAmount('');
+    setSuccessMsg('');
+    setErrorMsg('');
   };
 
+  // Calculate equivalent INR
+  const amountNum = parseFloat(amountUSD);
+  const equivalentINR = !isNaN(amountNum) ? (amountNum * exchangeRate).toFixed(2) : '0.00';
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold text-white tracking-tight">Deposit Funds</h1>
-        <p className="text-gray-400 mt-2">Send USDT (TRC20) via Trust Wallet for automatic balance credit</p>
+    <div className="max-w-4xl mx-auto space-y-8 px-4 py-6">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-extrabold text-white tracking-tight sm:text-4xl bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-500 bg-clip-text text-transparent">
+          Deposit Funds
+        </h1>
+        <p className="text-gray-400 mt-2 text-base max-w-xl mx-auto">
+          Send USDT (TRC20) to the admin wallet address, then submit the details below for on-chain verification.
+        </p>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
-        {paymentState === 'idle' || paymentState === 'creating' ? (
-          /* Create Payment Form */
-          <form onSubmit={handleGenerate} className="space-y-6">
-            <PaymentAmountInput
-              amount={amount}
-              currency={currency}
-              onChangeAmount={setAmount}
-              onChangeCurrency={setCurrency}
-              exchangeRate={exchangeRate}
-              disabled={paymentState === 'creating'}
-            />
+      {successMsg ? (
+        /* Success Screen */
+        <div className="bg-gray-900 border border-emerald-500/20 rounded-2xl p-8 text-center space-y-6 max-w-xl mx-auto shadow-2xl">
+          <div className="inline-flex p-4 bg-emerald-500/10 rounded-full animate-bounce">
+            <CheckCircle2 className="w-16 h-16 text-emerald-400" />
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold text-white">Deposit Submitted!</h3>
+            <p className="text-sm text-gray-400 mt-2">
+              Your transaction details have been sent to our servers for verification.
+            </p>
+            <p className="text-xs text-gray-500 mt-2 bg-gray-950 p-3 rounded-lg border border-gray-800 font-mono inline-block">
+              Status: PENDING ADMIN APPROVAL
+            </p>
+          </div>
+          <div className="pt-4 border-t border-gray-800 flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={handleReset}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20"
+            >
+              Submit Another Deposit
+            </button>
+            <a
+              href="/history"
+              className="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm transition-all border border-gray-700 flex items-center justify-center gap-1.5"
+            >
+              View History <ArrowRight className="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+      ) : (
+        /* Main Deposit Layout */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* Left Column: QR and Address Info (5 cols on lg) */}
+          <div className="lg:col-span-5 bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl space-y-6">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <QrCode className="w-5 h-5 text-indigo-400" />
+              1. Scan & Send
+            </h2>
 
-            {/* Live Exchange Rate Card */}
-            <div className="bg-gray-950 border border-gray-800 rounded-xl p-4 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-500/10 rounded-lg">
-                  <RefreshCw className={`w-4 h-4 text-indigo-400 ${rateLoading || isRateFetching ? 'animate-spin' : ''}`} />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-medium">Conversion Rate (Admin Configured)</p>
-                  <p className="text-sm font-bold text-white mt-0.5">
-                    {rateLoading ? 'Fetching exchange rates...' : `1 USD = ₹${exchangeRate.toFixed(2)} INR`}
-                  </p>
-                </div>
-              </div>
-              <div className="text-xs bg-indigo-500/10 text-indigo-400 px-2.5 py-1 rounded-lg font-semibold border border-indigo-500/20">
-                USDT / INR
+            {/* QR Code Container */}
+            <div className="flex flex-col items-center">
+              <div className="bg-white p-4 rounded-2xl relative shadow-inner flex items-center justify-center min-w-[220px] min-h-[220px] border-2 border-indigo-500/10 hover:border-indigo-500/30 transition-all group overflow-hidden">
+                {qrImageUrl ? (
+                  <>
+                    <img
+                      src={qrImageUrl}
+                      alt="Admin TRC20 USDT QR"
+                      className="w-44 h-44 block rounded-lg select-none"
+                    />
+                    <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                  </>
+                ) : (
+                  <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
+                )}
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={paymentState === 'creating' || !amount || parseFloat(amount) <= 0}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl py-3.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base font-semibold"
-            >
-              {paymentState === 'creating' ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating Order...
-                </>
-              ) : (
-                'Generate Payment QR'
-              )}
-            </button>
-          </form>
-        ) : (
-          /* Dynamic Payment QR Display & Countdown */
-          <div className="space-y-4">
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to edit amount
-            </button>
-            <DynamicPaymentQR
-              state={paymentState}
-              walletAddress={activeOrder?.walletAddress}
-              amount={activeOrder?.amount}
-              qrPayload={activeOrder?.qrPayload}
-              expiresAt={activeOrder?.expiresAt}
-              onReset={handleReset}
-            />
+            {/* Network Info Badge */}
+            <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-3.5 flex items-center gap-3">
+              <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400 shrink-0 font-bold text-xs">
+                USDT
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs text-indigo-400 font-semibold block">TRC20 (Tron Network)</span>
+                <span className="text-[10px] text-gray-500 block">Do not send any other token or network!</span>
+              </div>
+            </div>
+
+            {/* Copyable Address field */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 block">
+                Admin USDT Wallet Address
+              </label>
+              <div className="w-full bg-gray-950 rounded-xl p-3 flex items-center justify-between border border-gray-800 hover:border-gray-700 transition-all">
+                <code className="text-xs text-indigo-400 font-mono block truncate pr-3 select-all">
+                  {walletAddress}
+                </code>
+                <button
+                  onClick={copyToClipboard}
+                  disabled={walletAddress === 'Loading address...' || walletAddress === 'Error fetching address'}
+                  className="p-2 bg-gray-900 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors shrink-0 disabled:opacity-50"
+                  title="Copy wallet address"
+                >
+                  {copied ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Trust Wallet Button */}
+            {walletAddress !== 'Loading address...' && walletAddress !== 'Error fetching address' && (
+              <a
+                href={qrPayload}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium rounded-xl py-3 transition-all flex items-center justify-center gap-2 text-sm border border-gray-700 hover:border-gray-600 shadow-md"
+              >
+                Pay via Trust Wallet
+                <ExternalLink className="w-4 h-4 text-gray-400" />
+              </a>
+            )}
           </div>
-        )}
-      </div>
+
+          {/* Right Column: Form Submission (7 cols on lg) */}
+          <div className="lg:col-span-7 bg-gray-900 border border-gray-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Coins className="w-5 h-5 text-indigo-400" />
+                2. Submit Receipt Details
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Enter your transaction amount and hash. The system will auto-verify it on-chain.
+              </p>
+            </div>
+
+            {errorMsg && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <p className="text-red-400 text-sm font-medium">{errorMsg}</p>
+              </div>
+            )}
+
+            {/* Live Exchange Rate info */}
+            <div className="bg-gray-950 border border-gray-850 rounded-xl p-4 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-500/10 rounded-lg">
+                  <RefreshCw className={`w-4 h-4 text-indigo-400 ${isRateFetching ? 'animate-spin' : ''}`} />
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Current Exchange Rate</p>
+                  <p className="text-sm font-bold text-white mt-0.5">
+                    1 USDT = ₹{exchangeRate.toFixed(2)} INR
+                  </p>
+                </div>
+              </div>
+              <div className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded font-bold border border-indigo-500/20">
+                AUTO-REFRESH
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Amount Input */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-gray-300">
+                  Amount Sent (USDT)
+                </label>
+                <div className="relative rounded-xl shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Coins className="h-5 h-5 text-gray-500" />
+                  </div>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    min="0.000001"
+                    value={amountUSD}
+                    onChange={(e) => setAmountUSD(e.target.value)}
+                    disabled={submitting}
+                    className="block w-full pl-10 pr-16 bg-gray-950 border border-gray-800 rounded-xl py-3.5 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 text-base transition-all disabled:opacity-50"
+                    placeholder="0.00"
+                    required
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                    <span className="text-gray-500 font-semibold text-sm">USDT</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 pl-1">
+                  Estimated value: <span className="text-gray-300 font-semibold">₹{equivalentINR} INR</span>
+                </p>
+              </div>
+
+              {/* Tx Hash Input */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-gray-300">
+                  Transaction Hash (TxID)
+                </label>
+                <div className="relative rounded-xl shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <KeyRound className="h-5 h-5 text-gray-500" />
+                  </div>
+                  <input
+                    type="text"
+                    value={txHash}
+                    onChange={(e) => setTxHash(e.target.value)}
+                    disabled={submitting}
+                    className="block w-full pl-10 pr-4 bg-gray-950 border border-gray-800 rounded-xl py-3.5 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 text-sm font-mono transition-all disabled:opacity-50"
+                    placeholder="Enter 64-character TRON transaction hash"
+                    required
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500 pl-1">
+                  Provide the transaction ID of your transfer. Standard format is 64 hex characters.
+                </p>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={submitting || !amountUSD || !txHash}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl py-3.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-base shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 mt-2"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Submitting & Verifying...
+                  </>
+                ) : (
+                  <>
+                    Submit Deposit Receipt
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+
+        </div>
+      )}
     </div>
   );
 };
